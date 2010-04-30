@@ -38,92 +38,89 @@ import org.springframework.batch.integration.chunk.ChunkResponse;
  * 
  */
 
-// TODO [acochard] Is [Split] usefullle ? no ...
+// TODO [acochard] Is [Split] usefull ? no ...
 public class ChunkTask<T> extends GridTaskSplitAdapter<ChunkRequest<T>, ChunkResponse> {
 
-    /**
-     * Default serial version UID.
-     */
-    private static final long serialVersionUID = 1L;
+	/**
+	 * Default serial version UID.
+	 */
+	private static final long serialVersionUID = 1L;
 
-    @GridLoggerResource
-    private GridLogger log = null;
+	@GridLoggerResource
+	private final GridLogger log = null;
 
-    private ChunkProcessor<T> processor;
+	private ChunkProcessor<T> processor;
 
-    @Override
-    public ChunkResponse reduce(final List<GridJobResult> results) throws GridException {
-        assert results.size() == 1;
-        return results.get(0).getData();
-    }
+	@Override
+	public ChunkResponse reduce(final List<GridJobResult> results) throws GridException {
+		assert results.size() == 1;
+		return results.get(0).getData();
+	}
 
-    @SuppressWarnings("unchecked")
-    @Override
-    protected Collection<? extends GridJob> split(final int gridSize, final ChunkRequest<T> request)
-            throws GridException {
-        List<GridJob> jobs = new ArrayList<GridJob>();
+	public void setProcessor(ChunkProcessor<T> processor) {
+		this.processor = processor;
+	}
 
-        ChunkTaskParameters parameters = new ChunkTaskParameters(this.processor, request);
+	@SuppressWarnings("unchecked")
+	@Override
+	protected Collection<? extends GridJob> split(final int gridSize, final ChunkRequest<T> request)
+	throws GridException {
+		List<GridJob> jobs = new ArrayList<GridJob>();
 
-        // Every job gets its own word as an argument.
-        jobs.add(new GridJobAdapter<ChunkTaskParameters>(parameters) {
+		ChunkTaskParameters parameters = new ChunkTaskParameters(this.processor, request);
 
-            /**
-             * Default serial version UID.
-             */
-            private static final long serialVersionUID = 1L;
+		// Every job gets its own word as an argument.
+		jobs.add(new GridJobAdapter<ChunkTaskParameters>(parameters) {
 
-            public Serializable execute() {
-                ChunkTaskParameters parameters = getArgument();
-                Exception exception = null;
+			/**
+			 * Default serial version UID.
+			 */
+			private static final long serialVersionUID = 1L;
 
-                try {
-                    parameters.getProcessor().process(parameters.getRequest().getStepContribution(),
-                            new Chunk<T>(parameters.getRequest().getItems()));
-                } catch (Exception e) {
-                    log.error("Unable to process chunk", e);
-                    exception = e;
-                }
+			public Serializable execute() {
+				ChunkTaskParameters parameters = getArgument();
+				Exception exception = null;
 
-                // TODO [acochard] check if finished stepContribution is in
-                ChunkResponse response;
-                if (exception == null) {
-                    response = new ChunkResponse(true, parameters.getRequest().getJobId(), parameters.getRequest()
-                            .getStepContribution());
-                } else {
-                    response = new ChunkResponse(false, parameters.getRequest().getJobId(), parameters.getRequest()
-                            .getStepContribution(), exception.getMessage());
-                }
+				try {
+					parameters.getProcessor().process(parameters.getRequest().getStepContribution(),
+							new Chunk<T>(parameters.getRequest().getItems()));
+				} catch (Exception e) {
+					log.error("Unable to process chunk", e);
+					exception = e;
+				}
 
-                parameters.getRequest().getStepContribution();
+				ChunkResponse response;
+				if (exception == null) {
+					response = new ChunkResponse(true, parameters.getRequest().getJobId(), parameters.getRequest()
+							.getStepContribution());
+				} else {
+					response = new ChunkResponse(false, parameters.getRequest().getJobId(), parameters.getRequest()
+							.getStepContribution(), exception.getMessage());
+				}
+				return response;
+			}
+		});
 
-                // if (log.isInfoEnabled() == true) {
-                // log.info(">>>");
-                // }
-                return response;
-            }
-        });
+		return jobs;
+	}
 
-        return jobs;
-    }
+	private class ChunkTaskParameters implements Serializable {
+		private static final long serialVersionUID = 1L;
+		private final ChunkProcessor<T> processor;
+		private final ChunkRequest<T> request;
 
-    private class ChunkTaskParameters implements Serializable {
-        private static final long serialVersionUID = 1L;
-        private final ChunkProcessor<T> processor;
-        private final ChunkRequest<T> request;
+		ChunkTaskParameters(final ChunkProcessor<T> processor, final ChunkRequest<T> request) {
+			this.processor = processor;
+			this.request = request;
+		}
 
-        ChunkTaskParameters(final ChunkProcessor<T> processor, final ChunkRequest<T> request) {
-            this.processor = processor;
-            this.request = request;
-        }
+		public ChunkProcessor<T> getProcessor() {
+			return processor;
+		}
 
-        public ChunkProcessor<T> getProcessor() {
-            return processor;
-        }
+		public ChunkRequest<T> getRequest() {
+			return request;
+		}
 
-        public ChunkRequest<T> getRequest() {
-            return request;
-        }
-
-    }
+	}
 }

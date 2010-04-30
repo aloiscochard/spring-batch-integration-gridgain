@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/batch http://www.springframework.org/schema/batch/spring-batch-2.1.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd"
+	xmlns:p="http://www.springframework.org/schema/p">
+
+	<import resource="gridgain.xml" />
+
+	<!-- Standards items component -->
+	<bean id="reader" class="org.springframework.batch.item.file.FlatFileItemReader">
+		<property name="resource" value="classpath:sentences.txt"/>
+		<property name="lineMapper">
+			<bean class="org.springframework.batch.item.file.mapping.DefaultLineMapper">
+				<property name="fieldSetMapper">
+					<bean class="org.springframework.batch.integration.chunk.gridgain.SentenceFieldSetMapper"/>
+				</property>
+				<property name="lineTokenizer">
+					<bean class="org.springframework.batch.item.file.transform.DelimitedLineTokenizer">
+						<property name="delimiter" value="\"/>
+					</bean>
+				</property>
+			</bean>
+		</property>
+	</bean>
+	
+	<bean id="processor" class="org.springframework.batch.integration.chunk.gridgain.WordCounterProcessor"/>
+	
+	<bean id="writer" class="org.springframework.batch.integration.chunk.gridgain.ConsoleWriter"/>
+	
+	<!-- Chunk Writer -->
+	<bean id="chunkWriter" class="org.springframework.batch.integration.chunk.gridgain.ChunkGridGainItemWriter">
+		<property name="chunkProcessor">
+			<bean class="org.springframework.batch.integration.chunk.SerializableChunkProcessor">
+				<property name="itemProcessor" ref="processor"/>
+				<property name="itemWriter" ref="writer"/>
+			</bean>
+		</property>
+		<property name="grid" ref="grid"/>
+		<property name="throttleLimit" value="16"/>
+	</bean>
+	
+	<!-- Job -->
+	<job id="gridgainJob" xmlns="http://www.springframework.org/schema/batch">
+		<step id="step1">
+			<tasklet>
+				<chunk reader="reader" writer="chunkWriter" commit-interval="4"/>
+			</tasklet>
+		</step>
+	</job>
+</beans>

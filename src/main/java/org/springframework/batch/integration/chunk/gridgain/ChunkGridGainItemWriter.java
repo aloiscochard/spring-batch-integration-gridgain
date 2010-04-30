@@ -24,12 +24,12 @@ import org.apache.commons.logging.LogFactory;
 import org.gridgain.grid.Grid;
 import org.gridgain.grid.GridException;
 import org.gridgain.grid.GridTaskFuture;
-import org.gridgain.grid.GridTaskTimeoutException;
 import org.springframework.batch.core.BatchStatus;
 import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.StepContribution;
 import org.springframework.batch.core.StepExecution;
 import org.springframework.batch.core.listener.StepExecutionListenerSupport;
+import org.springframework.batch.core.step.item.ChunkProcessor;
 import org.springframework.batch.integration.chunk.AsynchronousFailureException;
 import org.springframework.batch.integration.chunk.ChunkRequest;
 import org.springframework.batch.integration.chunk.ChunkResponse;
@@ -37,14 +37,18 @@ import org.springframework.batch.item.ExecutionContext;
 import org.springframework.batch.item.ItemStream;
 import org.springframework.batch.item.ItemStreamException;
 import org.springframework.batch.item.ItemWriter;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.util.Assert;
+
+//TODO [aloiscochard] Is it possible to dynamically populate throttle limit from Grid ?
 
 /**
  * 
  * @author Alois Cochard
  * 
  */
-public class ChunkGridGainItemWriter<T> extends StepExecutionListenerSupport implements ItemWriter<T>, ItemStream {
+public class ChunkGridGainItemWriter<T> extends StepExecutionListenerSupport implements ItemWriter<T>, ItemStream,
+        InitializingBean {
 
     static final String ACTUAL = ChunkGridGainItemWriter.class.getName() + ".ACTUAL";
 
@@ -65,6 +69,14 @@ public class ChunkGridGainItemWriter<T> extends StepExecutionListenerSupport imp
     private int maxWaitTimeouts = DEFAULT_MAX_WAIT_TIMEOUTS;
 
     private long throttleLimit = DEFAULT_THROTTLE_LIMIT;
+
+    private ChunkProcessor<T> chunkProcessor;
+
+    @Override
+    public void afterPropertiesSet() throws Exception {
+        Assert.notNull(chunkProcessor, "chunkProcessor is required");
+        Assert.notNull(grid, "grid is required");
+    }
 
     @Override
     public ExitStatus afterStep(StepExecution stepExecution) {
@@ -92,7 +104,6 @@ public class ChunkGridGainItemWriter<T> extends StepExecutionListenerSupport imp
     @Override
     public void beforeStep(StepExecution stepExecution) {
         localState.setStepExecution(stepExecution);
-        // TODO [acochard] is it correct to allocate list here ?
         futures = new ArrayList<GridTaskFuture<ChunkResponse>>();
     }
 
@@ -108,6 +119,10 @@ public class ChunkGridGainItemWriter<T> extends StepExecutionListenerSupport imp
                 throw new ItemStreamException("Timed out waiting for back log on open");
             }
         }
+    }
+
+    public void setChunkProcessor(ChunkProcessor<T> chunkProcessor) {
+        this.chunkProcessor = chunkProcessor;
     }
 
     public void setGrid(Grid grid) {
@@ -130,7 +145,8 @@ public class ChunkGridGainItemWriter<T> extends StepExecutionListenerSupport imp
 
     /**
      * Public setter for the throttle limit. This limits the number of pending
-     * requests for chunk processing to avoid overwhelming the receivers.
+     * requests for chunk processing to avoid overwhelming the receivers. If
+     * smaller than one the throttle limit is disabled.
      * 
      * @param throttleLimit
      *            the throttle limit to set
@@ -158,6 +174,7 @@ public class ChunkGridGainItemWriter<T> extends StepExecutionListenerSupport imp
 
             // Create & launch task
             ChunkTask<T> task = new ChunkTask<T>();
+            task.setProcessor(chunkProcessor);
             GridTaskFuture<ChunkResponse> future = grid.<ChunkRequest<T>, ChunkResponse> execute(task, request);
             futures.add(future);
 
@@ -189,14 +206,11 @@ public class ChunkGridGainItemWriter<T> extends StepExecutionListenerSupport imp
             if (future.isDone()) {
                 try {
                     payload = future.get();
-                } catch (GridTaskTimeoutException e) {
-                    // TODO [acochard] handle that correctly
-                    e.printStackTrace();
                 } catch (GridException e) {
-                    // TODO [acochard] handle that correctly
-                    e.printStackTrace();
+                    throw new AsynchronousFailureException("Exception occured during GridGain task execution: " + e);
                 }
                 iterator.remove();
+                break;
             }
         }
 
@@ -224,7 +238,15 @@ public class ChunkGridGainItemWriter<T> extends StepExecutionListenerSupport imp
         int count = 0;
         int maxCount = maxWaitTimeouts;
         while (localState.getExpecting() > 0 && count++ < maxCount) {
+            long expecting = localState.getExpecting();
             getNextResult();
+            if (expecting == localState.getExpecting()) {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
         }
         return count < maxCount;
     }
@@ -241,6 +263,7 @@ public class ChunkGridGainItemWriter<T> extends StepExecutionListenerSupport imp
         }
 
         public long getExpecting() {
+
             return expected - actual;
         }
 

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd"
+	xmlns:p="http://www.springframework.org/schema/p">
+	<!-- Grid -->
+	<bean id="grid" class="org.gridgain.grid.GridSpringBean" scope="singleton">
+		<property name="configuration">
+			<bean id="grid.cfg" class="org.gridgain.grid.GridConfigurationAdapter" scope="singleton">
+				<property name="gridName" value="spring-batch-test" />
+				<property name="marshaller">
+					<bean class="org.gridgain.grid.marshaller.jdk.GridJdkMarshaller" />
+				</property>
+			</bean>
+		</property>
+	</bean>
+</beans>

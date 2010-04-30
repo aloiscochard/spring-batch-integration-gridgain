@@ -1,1 +1,14 @@
-Spring Integration Module for GridGain
+--[Spring Integration Module for GridGain]--
+This project contains a Spring Batch integration module for remote chunking using GridGain.
+
+[Remarks]
+Build using:
+- Spring Batch 2.1.0.RELEASE
+- GridGain 2.1.1
+
+Some source files are coming from 'Spring Integration 1.0.0.CI-20100331.014516-90'.
+
+[Authors]
+Alois Cochard (alois.cochard@gmail.com) / April 2010
+	
+
